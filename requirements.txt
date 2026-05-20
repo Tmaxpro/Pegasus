@@ -1,0 +1,22 @@
+# --- LangGraph / LangChain core ---
+langgraph>=0.2.50
+langgraph-checkpoint-sqlite>=2.0.0
+langchain>=0.3.0
+langchain-core>=0.3.0
+langchain-anthropic>=0.3.0
+
+# --- Sandbox orchestration ---
+docker>=7.1.0
+
+# --- API spec parsing & HTTP ---
+PyYAML>=6.0.2
+requests>=2.32.0
+jsonref>=1.1.0
+
+# --- Data validation / config ---
+pydantic>=2.9.0
+pydantic-settings>=2.5.0
+
+# --- CLI ---
+typer>=0.12.5
+rich>=13.9.0

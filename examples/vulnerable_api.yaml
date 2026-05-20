@@ -1,0 +1,136 @@
+openapi: 3.0.3
+info:
+  title: VAmPI-like Vulnerable API
+  version: "1.0.0"
+  description: |
+    Intentionally vulnerable API used to demonstrate Scorpio's grey-box
+    detection capability. DO NOT deploy this anywhere reachable from the
+    internet — it carries by-design OWASP API Top 10 weaknesses.
+servers:
+  - url: http://localhost:8000
+    description: Local lab instance
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    User:
+      type: object
+      properties:
+        id: { type: integer }
+        username: { type: string }
+        email: { type: string }
+    UserCreate:
+      type: object
+      required: [username, password, email]
+      properties:
+        username: { type: string }
+        password: { type: string }
+        email: { type: string }
+    Card:
+      type: object
+      properties:
+        card_id: { type: string }
+        holder: { type: string }
+        pan_last4: { type: string }
+        balance: { type: number }
+
+security:
+  - BearerAuth: []
+
+paths:
+  /auth/login:
+    post:
+      operationId: login
+      summary: Authenticate and receive a JWT.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username: { type: string }
+                password: { type: string }
+      responses:
+        "200": { description: OK }
+
+  /users:
+    post:
+      operationId: createUser
+      summary: Register a new user.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UserCreate' }
+      responses:
+        "201": { description: Created }
+    get:
+      operationId: listUsers
+      summary: Return all users (paginated).
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, default: 20 }
+      responses:
+        "200": { description: OK }
+
+  /users/{user_id}:
+    parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema: { type: integer }
+    get:
+      operationId: getUser
+      summary: Get a single user — VULNERABLE TO BOLA.
+      responses:
+        "200": { description: OK }
+    put:
+      operationId: updateUser
+      summary: Update a user — VULNERABLE TO MASS ASSIGNMENT (is_admin).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/User' }
+      responses:
+        "200": { description: OK }
+
+  /cards/{card_id}:
+    parameters:
+      - name: card_id
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      operationId: getCard
+      summary: Retrieve a payment card — VULNERABLE TO BOLA.
+      responses:
+        "200": { description: OK }
+
+  /admin/users:
+    get:
+      operationId: adminListUsers
+      summary: Admin list of users — VULNERABLE TO BFLA.
+      responses:
+        "200": { description: OK }
+
+  /search:
+    get:
+      operationId: searchUsers
+      summary: Full-text search — VULNERABLE TO SQLi via `q`.
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: OK }

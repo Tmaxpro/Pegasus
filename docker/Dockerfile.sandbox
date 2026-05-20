@@ -1,0 +1,60 @@
+# ---------------------------------------------------------------------------
+# Scorpio offensive sandbox.
+#
+# This image bundles the CLI tools the Attacker agent is allowed to invoke.
+# It is meant to be run as a long-lived container (`sleep infinity`) and
+# orchestrated through the Docker SDK; agents never get a shell — only a
+# tightly-validated `exec_run` with a list of arguments.
+# ---------------------------------------------------------------------------
+FROM debian:bookworm-slim
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PIP_BREAK_SYSTEM_PACKAGES=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+# --- Base OS + Python tooling ---------------------------------------------
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates curl wget git jq \
+        python3 python3-pip python3-venv \
+        golang-go \
+        sqlmap \
+        build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# --- ffuf (latest binary release) -----------------------------------------
+RUN set -eux; \
+    ARCH=$(dpkg --print-architecture); \
+    case "$ARCH" in \
+        amd64)  FFUF_ARCH=linux_amd64 ;; \
+        arm64)  FFUF_ARCH=linux_arm64 ;; \
+        *) echo "unsupported arch: $ARCH" >&2; exit 1 ;; \
+    esac; \
+    cd /tmp; \
+    curl -fsSLo ffuf.tar.gz "https://github.com/ffuf/ffuf/releases/download/v2.1.0/ffuf_2.1.0_${FFUF_ARCH}.tar.gz"; \
+    tar -xzf ffuf.tar.gz; \
+    install -m 0755 ffuf /usr/local/bin/ffuf; \
+    rm -rf /tmp/ffuf*
+
+# --- jwt_tool -------------------------------------------------------------
+RUN git clone --depth=1 https://github.com/ticarpi/jwt_tool /opt/jwt_tool \
+    && pip3 install --no-cache-dir -r /opt/jwt_tool/requirements.txt \
+    && ln -s /opt/jwt_tool/jwt_tool.py /usr/local/bin/jwt-tool \
+    && chmod +x /opt/jwt_tool/jwt_tool.py
+
+# --- Python helpers used by custom Attacker scripts -----------------------
+RUN pip3 install --no-cache-dir \
+        requests==2.32.3 \
+        httpx==0.27.2 \
+        pyjwt==2.9.0
+
+# --- SecLists wordlists ---------------------------------------------------
+RUN git clone --depth=1 https://github.com/danielmiessler/SecLists.git /workspace/seclists
+
+# --- Working dirs ---------------------------------------------------------
+RUN mkdir -p /workspace/scripts /workspace/output
+
+WORKDIR /workspace
+
+# Image only ever runs in detached mode; agents reach it via `docker exec`.
+CMD ["sleep", "infinity"]
