@@ -65,6 +65,7 @@ def _mission_brief(mission: Mission, target: str, auth_tokens: dict[str, str]) -
         },
         "available_auth_tokens": list(token_hint.keys()),
         "auth_tokens_preview": token_hint,
+        "auth_tokens": auth_tokens,  # Provide untruncated credentials for real tool calls
     }
     return (
         "MISSION BRIEFING — execute the RAOA loop, then emit your final JSON "

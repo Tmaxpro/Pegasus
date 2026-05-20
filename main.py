@@ -42,6 +42,22 @@ app.add_typer(sandbox_app, name="sandbox")
 console = Console()
 
 
+def _print_banner() -> None:
+    banner = """
+   ▄████████  ▄██████▄   ▄██████▄   ▄██████▄   ███      ▄██████▄  
+  ███    ███ ███    ███ ███    ███ ███    ███  ███     ███    ███ 
+  ███    █▀  ███    ███ ███    ███ ███    ███  ███     ███    ███ 
+  ███        ███    ███ ███    ███ ███    ███  ███     ███    ███ 
+▀███████████ ███    ███ ███    ███ ███    ███  ███     ███    ███ 
+         ███ ███    ███ ███    ███ ███    ███  ███     ███    ███ 
+   ▄█    ███ ███    ███ ███    ███ ███    ███  ███     ███    ███ 
+ ▄████████▀   ▀██████▀   ▀██████▀   ▀██████▀   ███████  ▀██████▀  
+                                                                  
+       -- Autonomous Grey-Box DAST for REST APIs --
+    """
+    console.print(Panel(banner.strip(), border_style="cyan", expand=False))
+
+
 def _configure_logging() -> None:
     settings = get_settings()
     logging.basicConfig(
@@ -141,11 +157,14 @@ def scan(
 ) -> None:
     """Run a full scan against the target API."""
     _configure_logging()
+    _print_banner()
     thread_id = thread_id or str(uuid.uuid4())
     console.print(
         Panel.fit(
-            f"[bold]Scorpio scan[/bold]\nspec=[cyan]{spec}[/cyan]\n"
-            f"target=[cyan]{base_url}[/cyan]\nthread_id=[magenta]{thread_id}[/magenta]",
+            f"[bold green]Starting Scorpio dynamic scan...[/bold green]\n"
+            f"Spec: [cyan]{spec}[/cyan]\n"
+            f"Target: [cyan]{base_url}[/cyan]\n"
+            f"Thread ID: [magenta]{thread_id}[/magenta]",
             border_style="green",
         )
     )
@@ -165,6 +184,85 @@ def scan(
         sys.exit(130)
 
     _render_final_state(final)
+
+
+# ---------------------------------------------------------------------------
+# validate
+# ---------------------------------------------------------------------------
+
+
+@app.command()
+def validate(
+    spec: Annotated[
+        Path,
+        typer.Option("--spec", "-s", exists=True, readable=True, help="OpenAPI spec path."),
+    ],
+) -> None:
+    """Validate and enrich the OpenAPI spec, showing endpoints and applicable attacks."""
+    _configure_logging()
+    _print_banner()
+
+    console.print(f"Loading and validating OpenAPI specification: [cyan]{spec}[/cyan]...")
+
+    from scorpio.agents.analyst import analyst_node
+    from scorpio.owasp import applicable_attacks
+
+    initial_state = ScannerState(
+        messages=[],
+        target_base_url="http://localhost",  # dummy target for analysis
+        openapi_spec_path=str(spec),
+        auth_tokens={},
+        api_inventory=[],
+        mission_queue=[],
+        current_mission=None,
+        completed_missions=[],
+        sandbox_output="",
+        last_attacker_summary="",
+        vulnerabilities_found=[],
+    )
+
+    try:
+        result = analyst_node(initial_state)
+        inventory = result.get("api_inventory") or []
+    except Exception as e:
+        console.print(f"[red]Error loading spec:[/red] {e}")
+        raise typer.Exit(code=1)
+
+    if not inventory:
+        console.print("[yellow]No endpoints found in the OpenAPI spec.[/yellow]")
+        return
+
+    table = Table(title="Scorpio OpenAPI Spec Analysis & Security Heuristics")
+    table.add_column("Method", style="bold cyan")
+    table.add_column("Path", style="white")
+    table.add_column("Resource Type", style="green")
+    table.add_column("Object Lookup", style="yellow")
+    table.add_column("Dependencies", style="magenta")
+    table.add_column("Applicable OWASP Tests", style="bold red")
+
+    total_attacks = 0
+    for ep in inventory:
+        attacks = applicable_attacks(ep)
+        total_attacks += len(attacks)
+        attack_names = ", ".join(a.owasp_id for a in attacks) or "None"
+        deps = ", ".join(ep.get("dependencies", [])) or "None"
+
+        table.add_row(
+            ep["method"],
+            ep["path"],
+            ep.get("resource_type", "unknown"),
+            "Yes" if ep.get("is_object_lookup") else "No",
+            deps,
+            attack_names
+        )
+
+    console.print(table)
+
+    console.print("\n[bold green]Validation Summary:[/bold green]")
+    console.print(f"- Total Endpoints Found: [cyan]{len(inventory)}[/cyan]")
+    console.print(f"- Object Lookup Routes: [cyan]{sum(1 for ep in inventory if ep.get('is_object_lookup'))}[/cyan]")
+    console.print(f"- Total Candidate Missions: [red]{total_attacks}[/red]")
+    console.print("\nUse `python main.py scan` to run the active penetration tests.")
 
 
 # ---------------------------------------------------------------------------

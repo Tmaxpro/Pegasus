@@ -24,7 +24,17 @@ class ScorpioSettings(BaseSettings):
     )
 
     # --- LLM ---
+    llm_provider: Literal["anthropic", "openai", "google", "ollama"] = Field(
+        default="anthropic",
+        description="LLM provider to use.",
+    )
     anthropic_api_key: str = Field(default="", description="Anthropic API key.")
+    openai_api_key: str = Field(default="", description="OpenAI API key.")
+    google_api_key: str = Field(default="", description="Google API key.")
+    ollama_base_url: str = Field(
+        default="http://localhost:11434",
+        description="Ollama API base URL.",
+    )
     model_name: str = Field(
         default="claude-opus-4-7",
         description="Default model used by every agent.",
@@ -35,6 +45,28 @@ class ScorpioSettings(BaseSettings):
     )
     llm_temperature: float = Field(default=0.1, ge=0.0, le=1.0)
     llm_max_tokens: int = Field(default=4096, gt=0)
+
+    def get_resolved_models(self) -> tuple[str, str]:
+        """Return the resolved (main_model, fast_model) based on the provider."""
+        provider = self.llm_provider
+        main_model = self.model_name
+        fast_model = self.fast_model_name
+
+        defaults = {
+            "anthropic": ("claude-opus-4-7", "claude-haiku-4-5-20251001"),
+            "openai": ("gpt-4o", "gpt-4o-mini"),
+            "google": ("gemini-2.5-pro", "gemini-2.5-flash"),
+            "ollama": ("llama3.1", "llama3.1"),
+        }
+
+        if provider != "anthropic":
+            if main_model == "claude-opus-4-7":
+                main_model = defaults[provider][0]
+            if fast_model == "claude-haiku-4-5-20251001":
+                fast_model = defaults[provider][1]
+
+        return main_model, fast_model
+
 
     # --- Sandbox ---
     sandbox_container_name: str = Field(default="scorpio-worker-sandbox")

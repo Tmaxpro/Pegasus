@@ -184,27 +184,26 @@ def analyst_node(state: ScannerState) -> dict[str, Any]:
             ],
         }
 
-    condensed = _condense_for_llm(inventory)
-    llm = get_llm("main")
-    response = llm.invoke(
-        [
-            SystemMessage(content=ANALYST_PROMPT),
-            HumanMessage(
-                content=(
-                    "Here is the deterministic inventory extracted from the OpenAPI "
-                    "document. Enrich every operation as instructed.\n\n"
-                    f"```json\n{json.dumps(condensed, indent=2)}\n```"
-                )
-            ),
-        ]
-    )
-
-    raw = extract_text(response)
     try:
+        condensed = _condense_for_llm(inventory)
+        llm = get_llm("main")
+        response = llm.invoke(
+            [
+                SystemMessage(content=ANALYST_PROMPT),
+                HumanMessage(
+                    content=(
+                        "Here is the deterministic inventory extracted from the OpenAPI "
+                        "document. Enrich every operation as instructed.\n\n"
+                        f"```json\n{json.dumps(condensed, indent=2)}\n```"
+                    )
+                ),
+            ]
+        )
+        raw = extract_text(response)
         parsed = parse_json_block(raw)
         enrichment = parsed["endpoints"] if isinstance(parsed, dict) else parsed  # type: ignore[index]
         inventory = _apply_semantic_enrichment(inventory, list(enrichment))
-    except (ValueError, KeyError, TypeError) as exc:
+    except Exception as exc:
         logger.warning(
             "[analyst] semantic enrichment failed (%s) — keeping deterministic inventory",
             exc,
